@@ -7,6 +7,35 @@ let chartHistory = [];
 let chartLimit = 30;
 let selectedLink = "L-PE2-BR1";
 
+// Standalone fallback topology metrics for demo mode
+let demoModeActive = false;
+let demoTimer = null;
+let demoStep = 0;
+let demoActiveFaults = {};
+const demoTopology = {
+    "nodes": {
+        "DC-CE-1": {"type": "datacenter", "vendor": "arista_eos", "cpu": 12.0, "memory": 34.0, "status": "UP", "x": 80, "y": 200},
+        "MPLS-PE-1": {"type": "provider-edge", "vendor": "cisco_iosxe", "cpu": 15.0, "memory": 40.0, "status": "UP", "x": 220, "y": 110},
+        "MPLS-PE-2": {"type": "provider-edge", "vendor": "cisco_iosxe", "cpu": 14.0, "memory": 38.0, "status": "UP", "x": 380, "y": 110},
+        "MPLS-P-1": {"type": "core", "vendor": "cisco_iosxe", "cpu": 8.0, "memory": 25.0, "status": "UP", "x": 300, "y": 60},
+        "MPLS-P-2": {"type": "core", "vendor": "cisco_iosxe", "cpu": 9.0, "memory": 27.0, "status": "UP", "x": 300, "y": 160},
+        "Hub-CE-1": {"type": "hub", "vendor": "arista_eos", "cpu": 18.0, "memory": 45.0, "status": "UP", "x": 220, "y": 290},
+        "Branch-CE-1": {"type": "branch", "vendor": "cisco_iosxe", "cpu": 22.0, "memory": 50.0, "status": "UP", "x": 500, "y": 150},
+        "Branch-CE-2": {"type": "branch", "vendor": "juniper_junos", "cpu": 20.0, "memory": 48.0, "status": "UP", "x": 500, "y": 250}
+    },
+    "links": {
+        "L-DC-PE1": {"src": "DC-CE-1", "dst": "MPLS-PE-1", "capacity": 1000, "utilization": 250, "latency": 2.5, "loss": 0.0, "jitter": 0.1, "type": "physical"},
+        "L-PE1-P1": {"src": "MPLS-PE-1", "dst": "MPLS-P-1", "capacity": 10000, "utilization": 1200, "latency": 5.0, "loss": 0.0, "jitter": 0.2, "type": "physical"},
+        "L-P1-P2": {"src": "MPLS-P-1", "dst": "MPLS-P-2", "capacity": 10000, "utilization": 1800, "latency": 8.0, "loss": 0.0, "jitter": 0.1, "type": "physical"},
+        "L-P2-PE2": {"src": "MPLS-P-2", "dst": "MPLS-PE-2", "capacity": 10000, "utilization": 900, "latency": 5.2, "loss": 0.0, "jitter": 0.3, "type": "physical"},
+        "L-PE2-BR1": {"src": "MPLS-PE-2", "dst": "Branch-CE-1", "capacity": 100, "utilization": 45, "latency": 15.0, "loss": 0.0, "jitter": 1.2, "type": "physical"},
+        "L-PE2-BR2": {"src": "MPLS-PE-2", "dst": "Branch-CE-2", "capacity": 100, "utilization": 30, "latency": 18.0, "loss": 0.0, "jitter": 1.5, "type": "physical"},
+        "T-BR1-DC-PRI": {"src": "Branch-CE-1", "dst": "DC-CE-1", "capacity": 50, "utilization": 15, "latency": 24.5, "loss": 0.0, "jitter": 1.4, "type": "tunnel", "underlay": "L-PE2-BR1"},
+        "T-BR1-DC-BAK": {"src": "Branch-CE-1", "dst": "DC-CE-1", "capacity": 30, "utilization": 5, "latency": 45.0, "loss": 0.0, "jitter": 2.5, "type": "tunnel", "underlay": "L-PE2-BR1"},
+        "T-BR2-DC-PRI": {"src": "Branch-CE-2", "dst": "DC-CE-1", "capacity": 50, "utilization": 12, "latency": 28.2, "loss": 0.0, "jitter": 1.7, "type": "tunnel", "underlay": "L-PE2-BR2"}
+    }
+};
+
 // DOM Elements
 const topologySvg = document.getElementById("topology-svg");
 const svgLinksGroup = document.getElementById("svg-links");
@@ -36,26 +65,141 @@ const ctx = canvas.getContext("2d");
 
 // Connect to backend websocket telemetry stream
 function connectWebsocket() {
-    ws = new WebSocket("ws://127.0.0.1:8000/api/v1/telemetry/ws");
+    try {
+        ws = new WebSocket("ws://127.0.0.1:8000/api/v1/telemetry/ws");
 
-    ws.onopen = () => {
-        console.log("[WEBSOCKET] Connected to telemetry source.");
-        document.querySelector(".status-indicator-dot").classList.add("online-glow");
-    };
+        ws.onopen = () => {
+            console.log("[WEBSOCKET] Connected to telemetry source.");
+            document.querySelector(".status-indicator-dot").classList.add("online-glow");
+            if (demoTimer) {
+                clearInterval(demoTimer);
+                demoModeActive = false;
+            }
+        };
 
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        currentTopology = data.topology;
-        activeAlerts = data.predictive_alerts;
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            currentTopology = data.topology;
+            activeAlerts = data.predictive_alerts;
+            
+            updateDashboardState();
+        };
+
+        ws.onclose = () => {
+            console.log("[WEBSOCKET] Disconnected. Activating Demo Fallback...");
+            document.querySelector(".status-indicator-dot").classList.remove("online-glow");
+            activateDemoMode();
+        };
+
+        ws.onerror = () => {
+            activateDemoMode();
+        };
+    } catch(e) {
+        activateDemoMode();
+    }
+}
+
+// Emulates backend ticks inside the browser for zero-server demo environments
+function activateDemoMode() {
+    if (demoModeActive) return;
+    demoModeActive = true;
+    console.log("[AETHERNOC] Standalone Client-Side Demo Mode activated.");
+    document.querySelector(".status-indicator-dot").classList.add("online-glow");
+    document.querySelector(".badge-text").innerText = "SECURE DEMO MODE (STANDALONE ACTIVE)";
+    
+    currentTopology = JSON.parse(JSON.stringify(demoTopology));
+    
+    demoTimer = setInterval(() => {
+        demoStep++;
+        const t = demoStep * 0.1;
+        
+        // Update nodes and link utilization locally
+        for (const linkId in currentTopology.links) {
+            const link = currentTopology.links[linkId];
+            if (link.type === "physical") {
+                link.utilization = Math.round(link.capacity * (0.3 + 0.08 * Math.sin(t) + 0.02 * Math.random()));
+                link.loss = 0.0;
+                link.latency = linkId === "L-PE2-BR1" ? 15.0 : linkId === "L-PE2-BR2" ? 18.0 : 5.0;
+                link.jitter = 1.0 + Math.random();
+            } else {
+                const underlay = currentTopology.links[link.underlay];
+                link.latency = underlay.latency + 10.0 + Math.random();
+                link.loss = underlay.loss;
+                link.jitter = underlay.jitter + 0.5;
+            }
+        }
+        
+        for (const nodeId in currentTopology.nodes) {
+            const node = currentTopology.nodes[nodeId];
+            node.cpu = Math.round(15.0 + 5.0 * Math.sin(t) + Math.random() * 4);
+            node.status = "UP";
+        }
+        
+        // Apply active simulation faults locally
+        activeAlerts = [];
+        for (const faultName in demoActiveFaults) {
+            const fault = demoActiveFaults[faultName];
+            const target = fault.target;
+            
+            if (currentTopology.links[target]) {
+                const link = currentTopology.links[target];
+                if (faultName === "link_congestion") {
+                    link.utilization = Math.round(link.capacity * 1.05);
+                    link.latency = 95.0;
+                    link.jitter = 18.2;
+                    
+                    activeAlerts.push({
+                        "id": `PA-${target}-CONG`,
+                        "type": "Interface Congestion",
+                        "target": target,
+                        "time_to_failure": "12 minutes",
+                        "confidence": 0.94,
+                        "severity": "CRITICAL",
+                        "root_cause": `Projected capacity saturation on link ${target}. Current rate: ${link.utilization} Mbps, Projected: ${link.utilization + 5} Mbps.`,
+                        "evidence": `Usage slope gradient: +0.42 Mbps/min. Platt Calibration z-score positive.`
+                    });
+                } else if (faultName === "packet_loss_spike") {
+                    link.loss = 8.5;
+                    link.latency = 35.0;
+                    
+                    // Cascade to tunnels
+                    for (const tunId in currentTopology.links) {
+                        const tun = currentTopology.links[tunId];
+                        if (tun.type === "tunnel" && tun.underlay === target) {
+                            tun.loss = 10.2;
+                            activeAlerts.push({
+                                "id": `PA-${tunId}-DEG`,
+                                "type": "Tunnel SLA Degradation",
+                                "target": tunId,
+                                "time_to_failure": "8 minutes",
+                                "confidence": 0.88,
+                                "severity": "CRITICAL",
+                                "root_cause": `Underlay link failure cascade. Physical carrier link ${target} is reporting packet loss of ${link.loss}%.`,
+                                "evidence": `Relational GNN Risk Propagation score: 0.88.`
+                            });
+                        }
+                    }
+                }
+            } else if (currentTopology.nodes[target]) {
+                const node = currentTopology.nodes[target];
+                if (faultName === "cpu_spike") {
+                    node.cpu = 96.0;
+                    activeAlerts.push({
+                        "id": `PA-${target}-FLAP`,
+                        "type": "Routing Instability",
+                        "target": target,
+                        "time_to_failure": "15 minutes",
+                        "confidence": 0.88,
+                        "severity": "CRITICAL",
+                        "root_cause": `OSPF/BGP convergence failure threat. Device ${target} Health Index critically degraded.`,
+                        "evidence": `Node CPU: ${node.cpu}%. Adjacent path degradation detected.`
+                    });
+                }
+            }
+        }
         
         updateDashboardState();
-    };
-
-    ws.onclose = () => {
-        console.log("[WEBSOCKET] Disconnected. Reconnecting in 3s...");
-        document.querySelector(".status-indicator-dot").classList.remove("online-glow");
-        setTimeout(connectWebsocket, 3000);
-    };
+    }, 2000);
 }
 
 // Update dashboard elements
@@ -335,6 +479,98 @@ async function submitChat() {
     appendChatBubble("user", text);
     chatInput.value = "";
 
+    if (demoModeActive) {
+        // Standalone Client-Side Mock Responses
+        setTimeout(() => {
+            const query = text.toLowerCase();
+            let response = {};
+            if (query.includes("fail") || query.includes("next") || query.includes("alert")) {
+                if (activeAlerts.length > 0) {
+                    const alert = activeAlerts[0];
+                    const targetNode = currentTopology.links[alert.target] ? currentTopology.links[alert.target].dst : alert.target;
+                    const vendor = currentTopology.nodes[targetNode] ? currentTopology.nodes[targetNode].vendor : "cisco_iosxe";
+                    
+                    let playbook_name = "reroute_traffic_cisco.yml";
+                    let playbook_content = `---
+- name: Restructure Edge Routing Metric Shares (Cisco IOS-XE)
+  hosts: ${alert.target}
+  tasks:
+    - name: Adjust administrative distance on secondary tunnel route
+      cisco.ios.ios_config:
+        lines:
+          - ip route 10.100.0.0 255.255.0.0 Tunnel 10 50
+        confirm: 5`;
+                    
+                    if (vendor === "arista_eos") {
+                        playbook_name = "reroute_traffic_arista.yml";
+                        playbook_content = `---
+- name: Restructure Edge Routing Metric Shares (Arista EOS)
+  hosts: ${alert.target}
+  tasks:
+    - name: Adjust route metrics via static CLI commands
+      arista.eos.eos_config:
+        lines:
+          - ip route 10.100.0.0/16 192.168.10.2 50
+        confirm: 5`;
+                    } else if (vendor === "juniper_junos") {
+                        playbook_name = "reroute_traffic_juniper.yml";
+                        playbook_content = `---
+- name: Restructure Edge Routing Metric Shares (Juniper Junos)
+  hosts: ${alert.target}
+  tasks:
+    - name: Adjust route preferences on target tunnel routing instances
+      junipernetworks.junos.junos_config:
+        lines:
+          - set routing-options static route 10.100.0.0/16 next-hop st0.0 preference 50
+        confirm: 5`;
+                    }
+                    
+                    response = {
+                        "issue_prediction": `Impending degradation of ${alert.target} (${alert.type})`,
+                        "confidence_score": alert.confidence,
+                        "root_cause_hypothesis": alert.root_cause,
+                        "estimated_time_to_impact": alert.time_to_failure,
+                        "affected_scope": {
+                            "devices": [alert.target],
+                            "sites": ["Branch-1"],
+                            "tunnels": ["T-BR1-DC-PRI"]
+                        },
+                        "recommended_actions": [
+                            "Initiate local diagnostic logs on targeted interface",
+                            "Adjust routing metrics or apply priority QoS policy map",
+                            "Verify tunnel restoration convergence"
+                        ],
+                        "remediation_ansible_playbook_name": playbook_name,
+                        "playbook_content": playbook_content,
+                        "urgency_classification": alert.severity,
+                        "evidence": alert.evidence,
+                        "rag_source_runbook": alert.type.includes("Congestion") ? "mpls_congestion_engineering.md" : "restore_ipsec_degradation.md"
+                    };
+                } else {
+                    response = {
+                        "issue_prediction": "All interfaces nominal. No predictive failures detected.",
+                        "confidence_score": 0.98,
+                        "root_cause_hypothesis": "None",
+                        "estimated_time_to_impact": "N/A",
+                        "affected_scope": {"devices": [], "sites": [], "tunnels": []},
+                        "recommended_actions": ["Maintain active telemetry polling."],
+                        "remediation_ansible_playbook_name": "None",
+                        "playbook_content": "",
+                        "urgency_classification": "ADVISORY",
+                        "evidence": "Network Health Index averaging >96% across paths.",
+                        "rag_source_runbook": "None"
+                    };
+                }
+            } else {
+                response = {
+                    "chat_reply": "Hello! I am your air-gapped NOC Copilot running in client-side fallback mode. Ask 'what is likely to fail next?' to scan predictions, or test fault injection below."
+                };
+            }
+            renderCopilotResponse(response);
+        }, 500);
+        return;
+    }
+
     try {
         const response = await fetch("http://127.0.0.1:8000/api/v1/copilot/chat", {
             method: "POST",
@@ -449,6 +685,12 @@ injectFaultBtn.addEventListener("click", async () => {
     const faultType = faultTypeSelect.value;
     const target = faultTargetSelect.value;
 
+    if (demoModeActive) {
+        demoActiveFaults[faultType] = { target: target };
+        appendChatBubble("system", `⚠️ [SIMULATION ENGINE] Demo Mode: Injected fault type: ${faultType} on target: ${target}. Scanning metrics...`);
+        return;
+    }
+
     let props = {};
     if (faultType === "link_congestion") {
         props = { factor: 4.5, latency_added: 65, jitter_added: 20 };
@@ -476,6 +718,13 @@ injectFaultBtn.addEventListener("click", async () => {
 });
 
 clearFaultsBtn.addEventListener("click", async () => {
+    if (demoModeActive) {
+        demoActiveFaults = {};
+        resetPlaybookPanel();
+        appendChatBubble("system", `🛡️ [SIMULATION ENGINE] Demo Mode: Reset signal sent. All active fault injections cleared. Re-establishing baseline thresholds.`);
+        return;
+    }
+
     try {
         // Clear active faults in loop
         const faults = ["link_congestion", "packet_loss_spike", "cpu_spike"];
