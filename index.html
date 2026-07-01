@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AetherNOC - Air-Gapped Predictive Copilot Console</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <!-- Dashboard Header -->
+        <header class="dashboard-header glass-card">
+            <div class="header-branding">
+                <div class="status-indicator-dot online-glow"></div>
+                <h1>AetherNOC</h1>
+                <span class="subsystem-tag">Predictive Copilot v1.0.0</span>
+            </div>
+            <div class="header-security-badge">
+                <span class="badge-lock-icon">🔒</span>
+                <span class="badge-text">SECURE AIR-GAPPED ENVIRONMENT (NO CLOUD DEPENDENCY)</span>
+            </div>
+            <div class="header-nhi-gauge">
+                <div class="gauge-label">Network Health Index:</div>
+                <div class="gauge-value" id="nhi-display">98%</div>
+                <div class="gauge-bar-outer">
+                    <div class="gauge-bar-inner" id="nhi-bar" style="width: 98%;"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid Layout -->
+        <main class="dashboard-grid">
+            
+            <!-- Column 1: Live Interactive Network Topology -->
+            <section class="grid-panel topology-panel glass-card">
+                <div class="panel-header">
+                    <h2>Live Network Topology Twin</h2>
+                    <div class="panel-header-actions">
+                        <span class="pulse-ring"></span>
+                        <span class="caption">Real-time Graph Sync</span>
+                    </div>
+                </div>
+                <div class="panel-content topology-view-container">
+                    <svg id="topology-svg" viewBox="0 0 600 400" width="100%" height="100%">
+                        <!-- Links and tunnels will be drawn by app.js -->
+                        <g id="svg-links"></g>
+                        <!-- Nodes will be drawn by app.js -->
+                        <g id="svg-nodes"></g>
+                    </svg>
+                </div>
+                <div class="panel-footer-legend">
+                    <span class="legend-item"><span class="dot physical"></span>Physical Link</span>
+                    <span class="legend-item"><span class="dot tunnel"></span>IPSec Tunnel</span>
+                    <span class="legend-item"><span class="dot healthy"></span>Healthy</span>
+                    <span class="legend-item"><span class="dot warning"></span>Degraded</span>
+                </div>
+            </section>
+
+            <!-- Column 2: Predictive Alerts & Telemetry Metrics -->
+            <section class="grid-middle-column">
+                
+                <!-- Subpanel A: Prediction Timeline -->
+                <div class="grid-panel timeline-panel glass-card">
+                    <div class="panel-header">
+                        <h2>Predictive Outage Timeline (15m Horizon)</h2>
+                        <span class="alert-count-badge" id="alert-count">0 Alerts</span>
+                    </div>
+                    <div class="panel-content timeline-list" id="timeline-container">
+                        <div class="timeline-empty-state">
+                            <span class="shield-check-icon">🛡️</span>
+                            <p>No predictive anomalies detected. Underlay latency and overlay traffic shapes within SLA thresholds.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Subpanel B: Real-time Telemetry Charts -->
+                <div class="grid-panel telemetry-panel glass-card">
+                    <div class="panel-header">
+                        <h2>Real-time Telemetry Analytics</h2>
+                        <select id="telemetry-metric-selector" class="dropdown-select">
+                            <option value="L-PE2-BR1">Branch-1 Link (L-PE2-BR1)</option>
+                            <option value="L-PE2-BR2">Branch-2 Link (L-PE2-BR2)</option>
+                            <option value="L-P1-P2">Core MPLS Link (L-P1-P2)</option>
+                        </select>
+                    </div>
+                    <div class="panel-content chart-container">
+                        <div class="chart-metrics-strip">
+                            <div class="metric-block">
+                                <span class="lbl">Latency</span>
+                                <span class="val" id="metric-latency">15.0 ms</span>
+                            </div>
+                            <div class="metric-block">
+                                <span class="lbl">Packet Loss</span>
+                                <span class="val" id="metric-loss">0.0 %</span>
+                            </div>
+                            <div class="metric-block">
+                                <span class="lbl">Jitter</span>
+                                <span class="val" id="metric-jitter">1.2 ms</span>
+                            </div>
+                        </div>
+                        <canvas id="telemetry-chart" height="110"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Column 3: Offline AI Copilot Console -->
+            <section class="grid-panel copilot-panel glass-card">
+                <div class="panel-header">
+                    <h2>Offline RAG AI Copilot</h2>
+                    <span class="engine-badge">Qwen 2.5-7B</span>
+                </div>
+                <div class="panel-content copilot-chat-container">
+                    <div class="chat-log" id="chat-log">
+                        <div class="chat-bubble system-bubble">
+                            <p><strong>AetherNOC Copilot:</strong> Ready. Connected to local vector runbooks. Type a question or ask <code>"what is predicted to fail next?"</code> to begin.</p>
+                        </div>
+                    </div>
+                    <div class="chat-input-row">
+                        <input type="text" id="chat-input" placeholder="Ask the predictive copilot..." autocomplete="off">
+                        <button id="send-chat-btn">Send</button>
+                    </div>
+                </div>
+
+                <!-- Dynamic Recommendation Engine Panel -->
+                <div class="remediation-panel">
+                    <div class="remediation-header">
+                        <h3>Playbook Recommendation</h3>
+                        <span class="badge-ready" id="playbook-status">IDLE</span>
+                    </div>
+                    <div class="remediation-body">
+                        <div class="playbook-details">
+                            <span class="playbook-name" id="playbook-name">No playbook selected</span>
+                            <pre class="playbook-code" id="playbook-code"># Safe rollback config commands will be generated here...</pre>
+                        </div>
+                        <button class="action-btn-primary" id="execute-playbook-btn" disabled>Apply Automated Restorative Policy</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Simulation Fault Ingestion Control Panel (Bottom Drawer) -->
+        <footer class="simulation-drawer glass-card">
+            <div class="drawer-header">
+                <h3>Simulation Fault Controller</h3>
+                <span class="drawer-caption">Inject scenarios to test predictive alarms</span>
+            </div>
+            <div class="drawer-controls">
+                <div class="control-group">
+                    <label for="fault-type-select">Anomaly Scenario:</label>
+                    <select id="fault-type-select" class="dropdown-select">
+                        <option value="link_congestion">PE-CE Congestion Spike (LSTM Forecast Test)</option>
+                        <option value="packet_loss_spike">Physical Link Carrier Degradation (GNN Risk Test)</option>
+                        <option value="cpu_spike">Device CPU Exhaustion (Health Index Test)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="fault-target-select">Target Asset:</label>
+                    <select id="fault-target-select" class="dropdown-select">
+                        <option value="L-PE2-BR1">Branch Link 1 (L-PE2-BR1)</option>
+                        <option value="L-PE2-BR2">Branch Link 2 (L-PE2-BR2)</option>
+                        <option value="Branch-CE-1">Branch Router 1 (Branch-CE-1)</option>
+                    </select>
+                </div>
+                <button class="action-btn-danger" id="inject-fault-btn">Inject Failure</button>
+                <button class="action-btn-secondary" id="clear-faults-btn">Reset Network (Clear Faults)</button>
+            </div>
+        </footer>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

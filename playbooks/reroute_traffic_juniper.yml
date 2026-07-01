@@ -1,0 +1,10 @@
+---
+- name: Restructure Edge Routing Metric Shares (Juniper Junos)
+  hosts: branch_juniper
+  gather_facts: false
+  tasks:
+    - name: Adjust route preferences on target tunnel routing instances
+      junipernetworks.junos.junos_config:
+        lines:
+          - set routing-options static route 10.100.0.0/16 next-hop st0.0 preference 50
+        confirm: 5

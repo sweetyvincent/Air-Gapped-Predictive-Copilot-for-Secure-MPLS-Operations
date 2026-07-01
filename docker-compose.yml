@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # 1. Frontend Web Console (Nginx serving static dashboard files)
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html
+      - ./index.css:/usr/share/nginx/html/index.css
+      - ./app.js:/usr/share/nginx/html/app.js
+    restart: always
+    depends_on:
+      - backend
+
+  # 2. FastAPI Backend API & WebSocket Orchestrator
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aethernoc-backend:v1.0.0
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TELEMETRY_DB_URL=postgresql://postgres:secret@tsdb:5432/telemetry
+    restart: always
+    depends_on:
+      - tsdb
+
+  # 3. Time-Series Telemetry & Syslog Database (TimescaleDB)
+  tsdb:
+    image: timescale/timescaledb:latest-pg14
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=telemetry
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+    volumes:
+      - tsdb_data:/var/lib/postgresql/data
+    restart: always
+
+  # 4. Stream Telemetry logs collector (Vector)
+  vector:
+    image: timberio/vector:latest-alpine
+    ports:
+      - "514:514/udp"
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+    restart: always
+    depends_on:
+      - tsdb
+
+volumes:
+  tsdb_data:

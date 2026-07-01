@@ -1,0 +1,10 @@
+---
+- name: Restructure Edge Routing Metric Shares (Arista EOS)
+  hosts: branch_arista
+  gather_facts: false
+  tasks:
+    - name: Adjust route metrics via static CLI commands
+      arista.eos.eos_config:
+        lines:
+          - ip route 10.100.0.0/16 192.168.10.2 50
+        confirm: 5

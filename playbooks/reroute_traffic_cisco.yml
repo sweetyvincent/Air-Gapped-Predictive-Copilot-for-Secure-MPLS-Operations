@@ -1,0 +1,10 @@
+---
+- name: Restructure Edge Routing Metric Shares (Cisco IOS-XE)
+  hosts: branch_cisco
+  gather_facts: false
+  tasks:
+    - name: Adjust administrative distance on secondary tunnel route
+      cisco.ios.ios_config:
+        lines:
+          - ip route 10.100.0.0 255.255.0.0 Tunnel 10 50
+        confirm: 5
